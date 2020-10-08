@@ -39,14 +39,16 @@ exports.invitations = functions.firestore
                   invitations.push(uid);
                   invitationsList
                     .update({ invitations: invitations })
+                    .then(() =>
+                      functions.logger.log(
+                        "Friend added for ${uid} - Invitation added for ${fid}"
+                      )
+                    )
                     .catch(() =>
                       functions.logger.error(
                         "Update error with invitations/${fid}"
                       )
                     );
-                  functions.logger.log(
-                    "Friend added for ${uid} - Invitation added for ${fid}"
-                  );
                 }
               }
             })
