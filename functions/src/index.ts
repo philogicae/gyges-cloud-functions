@@ -22,10 +22,9 @@ if (!function_name || function_name === "invitations") {
 
   exports.invitations = fs_intern
     .document("friends/{userId}")
-    .onUpdate(async (change, context) => {
+    .onUpdate((change, context) => {
       const previousList: String[] = change.before.get("friends");
       const newList: String[] = change.after.get("friends");
-
       const uid: String = context.params.userId;
       const fid: String | undefined = newList
         .filter((id: String) => !previousList.includes(id))
@@ -38,78 +37,66 @@ if (!function_name || function_name === "invitations") {
         : db
             .doc("friends/" + fid)
             .get()
-            .then(async (friendsDoc) =>
+            .then((friendsDoc) =>
               !friendsDoc.exists
                 ? Promise.resolve().then(() =>
                     logger.error("Ignored : friends/" + fid + " doesn't exist")
                   )
-                : async () =>
-                    friendsDoc.get("friends").includes(uid)
-                      ? Promise.resolve().then(() =>
-                          logger.log(
-                            "Ignored : " +
-                              uid +
-                              " already exist in friends/" +
-                              fid
-                          )
-                        )
-                      : db
-                          .doc("invitations/" + fid)
-                          .get()
-                          .then(async (invitationsDoc) =>
-                            !invitationsDoc.exists
-                              ? Promise.resolve().then(() =>
-                                  logger.error(
-                                    "Ignored : invitations/" +
-                                      fid +
-                                      " doesn't exist"
-                                  )
-                                )
-                              : async () => {
-                                  const invitations: String[] = invitationsDoc.get(
-                                    "invitations"
-                                  );
-                                  return invitations.includes(uid)
-                                    ? Promise.resolve().then(() =>
-                                        logger.log(
-                                          "Ignored : " +
-                                            uid +
-                                            " already exist in invitations/" +
-                                            fid
-                                        )
-                                      )
-                                    : async () => {
-                                        invitations.push(uid);
-                                        return db
-                                          .doc("invitations/" + fid)
-                                          .update({
-                                            invitations: invitations,
-                                          })
-                                          .then(() =>
-                                            logger.log(
-                                              "Friend added for " +
-                                                uid +
-                                                " - Invitation added for " +
-                                                fid
-                                            )
-                                          )
-                                          .catch((err) =>
-                                            logger.error(
-                                              "Update error on invitations/" +
-                                                fid +
-                                                ":",
-                                              err
-                                            )
-                                          );
-                                      };
-                                }
-                          )
-                          .catch((err) =>
+                : friendsDoc.get("friends").includes(uid)
+                ? Promise.resolve().then(() =>
+                    logger.log(
+                      "Ignored : " + uid + " already exist in friends/" + fid
+                    )
+                  )
+                : db
+                    .doc("invitations/" + fid)
+                    .get()
+                    .then((invitationsDoc) =>
+                      !invitationsDoc.exists
+                        ? Promise.resolve().then(() =>
                             logger.error(
-                              "Access error on invitations/" + fid + ":",
-                              err
+                              "Ignored : invitations/" + fid + " doesn't exist"
                             )
                           )
+                        : invitationsDoc.get("invitations").includes(uid)
+                        ? Promise.resolve().then(() =>
+                            logger.log(
+                              "Ignored : " +
+                                uid +
+                                " already exist in invitations/" +
+                                fid
+                            )
+                          )
+                        : Promise.resolve().then(() =>
+                            db
+                              .doc("invitations/" + fid)
+                              .update({
+                                invitations: invitationsDoc
+                                  .get("invitations")
+                                  .concat(uid)
+                              })
+                              .then(() =>
+                                logger.log(
+                                  "Friend added for " +
+                                    uid +
+                                    " - Invitation added for " +
+                                    fid
+                                )
+                              )
+                              .catch((err) =>
+                                logger.error(
+                                  "Update error on invitations/" + fid + ":",
+                                  err
+                                )
+                              )
+                          )
+                    )
+                    .catch((err) =>
+                      logger.error(
+                        "Access error on invitations/" + fid + ":",
+                        err
+                      )
+                    )
             )
             .catch((err) =>
               logger.error("Access error on friends/" + fid + ":", err)
