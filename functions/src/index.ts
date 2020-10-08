@@ -18,44 +18,48 @@ exports.invitations = functions.firestore
     newList
       .filter((fid: String) => !previousList.includes(fid))
       .forEach((fid) => {
-        let friends: String[] | undefined;
         db.doc("friends/" + fid)
           .get()
-          .then(
-            (doc) => (friends = doc.exists ? doc.get("friends") : undefined)
-          )
+          .then((friendsDoc) => {
+            if (friendsDoc.exists) {
+              const friends: String[] = friendsDoc.get("friends");
+              if (!friends.includes(uid)) {
+                const invitationsList = db.doc("invitations/" + fid);
+                invitationsList
+                  .get()
+                  .then((invitationsDoc) => {
+                    if (invitationsDoc.exists) {
+                      const invitations: String[] = invitationsDoc.get(
+                        "invitations"
+                      );
+                      if (!invitations.includes(uid)) {
+                        invitations.push(uid);
+                        invitationsList
+                          .update({ invitations: invitations })
+                          .then(() =>
+                            functions.logger.log(
+                              "Friend added for ${uid} - Invitation added for ${fid}"
+                            )
+                          )
+                          .catch(() =>
+                            functions.logger.error(
+                              "Update error with invitations/${fid}"
+                            )
+                          );
+                      }
+                    }
+                  })
+                  .catch(() =>
+                    functions.logger.error(
+                      "Access error with invitations/${fid}"
+                    )
+                  );
+              }
+            }
+          })
           .catch(() =>
             functions.logger.error("Access error with friends/${fid}")
           );
-
-        if (friends !== undefined && !friends.includes(uid)) {
-          const invitationsList = db.doc("invitations/" + fid);
-          invitationsList
-            .get()
-            .then((doc) => {
-              if (doc.exists) {
-                const invitations: String[] = doc.get("invitations");
-                if (!invitations.includes(uid)) {
-                  invitations.push(uid);
-                  invitationsList
-                    .update({ invitations: invitations })
-                    .then(() =>
-                      functions.logger.log(
-                        "Friend added for ${uid} - Invitation added for ${fid}"
-                      )
-                    )
-                    .catch(() =>
-                      functions.logger.error(
-                        "Update error with invitations/${fid}"
-                      )
-                    );
-                }
-              }
-            })
-            .catch(() =>
-              functions.logger.error("Access error with invitations/${fid}")
-            );
-        }
       });
     return Promise.resolve();
   });
