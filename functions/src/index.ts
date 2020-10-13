@@ -1,8 +1,8 @@
 // Firebase Admin SDK to access Cloud Firestore
-import { firestore as fs_extern, initializeApp } from "firebase-admin";
+import { firestore as fs_extern, initializeApp, auth } from "firebase-admin";
 
 // Cloud Functions for Firebase SDK to create Cloud Functions and setup triggers
-import { firestore as fs_intern, logger } from "firebase-functions";
+import { firestore as fs_intern, https, logger } from "firebase-functions";
 
 // Smarter cold boot firebase-admin
 let is_admin_initialized = false;
@@ -102,4 +102,33 @@ if (!function_name || function_name === "invitations") {
               logger.error("Access error on friends/" + fid + ":", err)
             );
     });
+}
+
+if (!function_name || function_name === "cleanup") {
+  ensureAdminIsInitialized();
+  const db = fs_extern();
+  const account = auth();
+
+  exports.cleanup = https.onRequest(async (_req, resp) => {
+    try {
+      const users = await db
+        .collection("users")
+        .where("fullName", "==", "Nuage Laboratoire")
+        .get();
+      const uids = users.docs.map((user) => user.id);
+
+      uids.forEach(async (uid) => {
+        await db.doc("users/" + uid).delete();
+        await db.doc("friends/" + uid).delete();
+        await db.doc("invitations/" + uid).delete();
+      });
+      await account.deleteUsers(uids);
+
+      resp.status(200).send({ "Deleted users": uids });
+      logger.log("Deleted users:", uids);
+    } catch (err) {
+      resp.status(500).send("Cleaning error on users");
+      logger.error("Cleaning error on users :", err);
+    }
+  });
 }
