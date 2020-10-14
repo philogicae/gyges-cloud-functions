@@ -29,11 +29,11 @@ if (!function_name || function_name === "invitations") {
   exports.invitations = fs_intern
     .document("friends/{userId}")
     .onUpdate((change, context) => {
-      const previousList: String[] = change.before.get("friends");
-      const newList: String[] = change.after.get("friends");
-      const uid: String = context.params.userId;
-      const fid: String | undefined = newList
-        .filter((id: String) => !previousList.includes(id))
+      const previousList: string[] = change.before.get("friends");
+      const newList: string[] = change.after.get("friends");
+      const uid: string = context.params.userId;
+      const fid: string | undefined = newList
+        .filter((id: string) => !previousList.includes(id))
         .pop();
 
       return fid === undefined
@@ -153,21 +153,41 @@ if (!function_name || function_name === "cleanup") {
 
   exports.cleanup = https.onRequest(async (_req, resp) => {
     try {
-      const users = await db
-        .collection("users")
-        .where("fullName", "==", "Nuage Laboratoire")
-        .get();
-      const uids = users.docs.map((user) => user.id);
+      const testUids = (
+        await db
+          .collection("users")
+          .where("fullName", "==", "Nuage Laboratoire")
+          .get()
+      ).docs.map((user) => user.id);
 
-      uids.forEach(async (uid) => {
+      testUids.forEach(async (uid) => {
         await db.doc("users/" + uid).delete();
         await db.doc("friends/" + uid).delete();
         await db.doc("invitations/" + uid).delete();
       });
-      await account.deleteUsers(uids);
 
-      resp.status(200).send({ "Deleted users": uids });
-      logger.log("Deleted users:", uids);
+      const validUids: string[] = (await db.collection("users").get()).docs.map(
+        (user) => user.id
+      );
+      const invalidUids: string[] = [];
+      let pageToken: string | undefined;
+      do {
+        const listUsers: auth.ListUsersResult = await account.listUsers(
+          1000,
+          pageToken
+        );
+        invalidUids.push(
+          ...listUsers.users
+            .map((user) => user.uid)
+            .filter((uid) => !validUids.includes(uid))
+        );
+        pageToken = listUsers.pageToken;
+      } while (!!pageToken);
+
+      await account.deleteUsers(invalidUids);
+
+      resp.status(200).send({ "Deleted users": testUids });
+      logger.log("Deleted users:", testUids);
     } catch (err) {
       resp.status(500).send("Cleaning error on users");
       logger.error("Cleaning error on users :", err);
