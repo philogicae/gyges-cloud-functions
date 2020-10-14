@@ -1,5 +1,10 @@
 // Firebase Admin SDK to access Cloud Firestore
-import { firestore as fs_extern, initializeApp, auth } from "firebase-admin";
+import {
+  firestore as fs_extern,
+  initializeApp,
+  auth,
+  messaging
+} from "firebase-admin";
 
 // Cloud Functions for Firebase SDK to create Cloud Functions and setup triggers
 import { firestore as fs_intern, https, logger } from "firebase-functions";
@@ -19,6 +24,7 @@ const function_name = process.env.FUNCTION_NAME || process.env.K_SERVICE;
 if (!function_name || function_name === "invitations") {
   ensureAdminIsInitialized();
   const db = fs_extern();
+  const notify = messaging();
 
   exports.invitations = fs_intern
     .document("friends/{userId}")
@@ -75,14 +81,50 @@ if (!function_name || function_name === "invitations") {
                                   .get("invitations")
                                   .concat(uid)
                               })
-                              .then(() =>
+                              .then(async () => {
                                 logger.log(
                                   "Friend added for " +
                                     uid +
                                     " - Invitation added for " +
                                     fid
-                                )
-                              )
+                                );
+                                const tokenFid = (
+                                  await db.doc("users/" + fid).get()
+                                ).get("fcmToken");
+                                return tokenFid === undefined
+                                  ? Promise.resolve().then(() =>
+                                      logger.error(
+                                        "Ignored : No fcmToken found on users/" +
+                                          fid
+                                      )
+                                    )
+                                  : notify
+                                      .sendToDevice(tokenFid, {
+                                        notification: {
+                                          title:
+                                            "New invitation from " +
+                                            (
+                                              await db.doc("users/" + uid).get()
+                                            ).get("nickname"),
+                                          body: "Tap to open the app",
+                                          badge: "1",
+                                          sound: "default"
+                                        }
+                                      })
+                                      .then(() =>
+                                        logger.log(
+                                          "Notification sent to " + fid
+                                        )
+                                      )
+                                      .catch((err) =>
+                                        logger.error(
+                                          "Notification error on users/" +
+                                            fid +
+                                            ":",
+                                          err
+                                        )
+                                      );
+                              })
                               .catch((err) =>
                                 logger.error(
                                   "Update error on invitations/" + fid + ":",
