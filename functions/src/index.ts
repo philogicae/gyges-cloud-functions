@@ -91,7 +91,7 @@ if (!function_name || function_name === "invitations") {
                                 const tokenFid = (
                                   await db.doc("users/" + fid).get()
                                 ).get("fcmToken");
-                                return tokenFid === undefined
+                                return !tokenFid
                                   ? Promise.resolve().then(() =>
                                       logger.error(
                                         "Ignored : No fcmToken found on users/" +
