@@ -107,7 +107,7 @@ if (!function_name || function_name === "invitations") {
                                             (
                                               await db.doc("users/" + uid).get()
                                             ).get("nickname"),
-                                          body: "Tap to open the app"
+                                          body: "Tap to open"
                                         },
                                         data: {
                                           screen: "/friends"
