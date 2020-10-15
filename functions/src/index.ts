@@ -99,16 +99,27 @@ if (!function_name || function_name === "invitations") {
                                       )
                                     )
                                   : notify
-                                      .sendToDevice(tokenFid, {
+                                      .send({
+                                        token: tokenFid,
                                         notification: {
                                           title:
                                             "New invitation from " +
                                             (
                                               await db.doc("users/" + uid).get()
                                             ).get("nickname"),
-                                          body: "Tap to open the app",
-                                          badge: "1",
-                                          sound: "default"
+                                          body: "Tap to open the app"
+                                        },
+                                        data: {
+                                          screen: "/friends"
+                                        },
+                                        android: {
+                                          priority: "high",
+                                          notification: {
+                                            clickAction:
+                                              "FLUTTER_NOTIFICATION_CLICK",
+                                            visibility: "public",
+                                            sound: "default"
+                                          }
                                         }
                                       })
                                       .then(() =>
