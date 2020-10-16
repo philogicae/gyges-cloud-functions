@@ -165,14 +165,14 @@ if (!function_name || function_name === "cleanup") {
 
   exports.cleanup = https.onRequest(async (_req, resp) => {
     try {
-      const testUids = (
+      const invalidUids: string[] = (
         await db
           .collection("users")
           .where("fullName", "==", "Nuage Laboratoire")
           .get()
       ).docs.map((user) => user.id);
 
-      testUids.forEach(async (uid) => {
+      invalidUids.forEach(async (uid) => {
         await db.doc("users/" + uid).delete();
         await db.doc("friends/" + uid).delete();
         await db.doc("invitations/" + uid).delete();
@@ -181,7 +181,7 @@ if (!function_name || function_name === "cleanup") {
       const validUids: string[] = (await db.collection("users").get()).docs.map(
         (user) => user.id
       );
-      const invalidUids: string[] = [];
+
       let pageToken: string | undefined;
       do {
         const listUsers: auth.ListUsersResult = await account.listUsers(
@@ -198,8 +198,8 @@ if (!function_name || function_name === "cleanup") {
 
       await account.deleteUsers(invalidUids);
 
-      resp.status(200).send({ "Deleted users": testUids });
-      logger.log("Deleted users:", testUids);
+      resp.status(200).send({ "Deleted users": invalidUids });
+      logger.log("Deleted users:", invalidUids);
     } catch (err) {
       resp.status(500).send("Cleaning error on users");
       logger.error("Cleaning error on users :", err);
