@@ -113,10 +113,11 @@ if (!function_name || function_name === "invitations") {
                                           screen: "/friends"
                                         },
                                         android: {
-                                          priority: "high",
                                           notification: {
+                                            priority: "max",
                                             clickAction:
                                               "FLUTTER_NOTIFICATION_CLICK",
+                                            channelId: "ZONE_ALERT",
                                             visibility: "public",
                                             sound: "default"
                                           }
