@@ -118,6 +118,7 @@ if (!function_name || function_name === "invitations") {
                                           screen: "/friends"
                                         },
                                         android: {
+                                          collapseKey: "invitations",
                                           notification: {
                                             priority: "max",
                                             clickAction:
