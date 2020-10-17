@@ -88,10 +88,15 @@ if (!function_name || function_name === "invitations") {
                                     " - Invitation added for " +
                                     fid
                                 );
-                                const tokenFid = (
-                                  await db.doc("users/" + fid).get()
-                                ).get("fcmToken");
-                                return !tokenFid
+                                const tokens: string[] = [];
+                                const user = await db.doc("users/" + fid).get();
+                                const mobileToken = user.get("mobile");
+                                if (mobileToken !== undefined)
+                                  tokens.push(mobileToken["token"]);
+                                /* const webToken = user.get("web");
+                                if (webToken !== undefined)
+                                  tokens.push(webToken["token"]); */
+                                return tokens.length < 1
                                   ? Promise.resolve().then(() =>
                                       logger.error(
                                         "Ignored : No fcmToken found on users/" +
@@ -99,8 +104,8 @@ if (!function_name || function_name === "invitations") {
                                       )
                                     )
                                   : notify
-                                      .send({
-                                        token: tokenFid,
+                                      .sendMulticast({
+                                        tokens: tokens,
                                         notification: {
                                           title:
                                             "New invitation from " +
@@ -122,6 +127,7 @@ if (!function_name || function_name === "invitations") {
                                             sound: "default"
                                           }
                                         }
+                                        /* webpush: { headers: { TTL: "600" } } */
                                       })
                                       .then(() =>
                                         logger.log(
