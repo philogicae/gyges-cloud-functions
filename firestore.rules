@@ -22,5 +22,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
+    match /managers/{userId} {
+      function isSignedIn() {
+        return request.auth.uid != null;
+      }
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
   }
 }
