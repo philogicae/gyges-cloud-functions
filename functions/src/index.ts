@@ -77,9 +77,7 @@ if (!function_name || function_name === "invitations") {
                             db
                               .doc("invitations/" + fid)
                               .update({
-                                invitations: invitationsDoc
-                                  .get("users")
-                                  .concat(uid)
+                                users: invitationsDoc.get("users").concat(uid)
                               })
                               .then(async () => {
                                 logger.log(
