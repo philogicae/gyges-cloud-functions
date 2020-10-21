@@ -29,8 +29,8 @@ if (!function_name || function_name === "invitations") {
   exports.invitations = fs_intern
     .document("friends/{userId}")
     .onUpdate((change, context) => {
-      const previousList: string[] = change.before.get("friends");
-      const newList: string[] = change.after.get("friends");
+      const previousList: string[] = change.before.get("users");
+      const newList: string[] = change.after.get("users");
       const uid: string = context.params.userId;
       const fid: string | undefined = newList
         .filter((id: string) => !previousList.includes(id))
@@ -48,7 +48,7 @@ if (!function_name || function_name === "invitations") {
                 ? Promise.resolve().then(() =>
                     logger.error("Ignored : friends/" + fid + " doesn't exist")
                   )
-                : friendsDoc.get("friends").includes(uid)
+                : friendsDoc.get("users").includes(uid)
                 ? Promise.resolve().then(() =>
                     logger.log(
                       "Ignored : " + uid + " already exist in friends/" + fid
@@ -64,7 +64,7 @@ if (!function_name || function_name === "invitations") {
                               "Ignored : invitations/" + fid + " doesn't exist"
                             )
                           )
-                        : invitationsDoc.get("invitations").includes(uid)
+                        : invitationsDoc.get("users").includes(uid)
                         ? Promise.resolve().then(() =>
                             logger.log(
                               "Ignored : " +
@@ -78,7 +78,7 @@ if (!function_name || function_name === "invitations") {
                               .doc("invitations/" + fid)
                               .update({
                                 invitations: invitationsDoc
-                                  .get("invitations")
+                                  .get("users")
                                   .concat(uid)
                               })
                               .then(async () => {
@@ -183,6 +183,7 @@ if (!function_name || function_name === "cleanup") {
         await db.doc("users/" + uid).delete();
         await db.doc("friends/" + uid).delete();
         await db.doc("invitations/" + uid).delete();
+        await db.doc("managers/" + uid).delete();
       });
 
       const validUids: string[] = (await db.collection("users").get()).docs.map(
