@@ -29,5 +29,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
+    match /games/{gameId} {
+      function isSignedIn() {
+        return request.auth.uid != null;
+      }
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && 
+        (request.auth.uid == request.resource.data.player1
+        || request.auth.uid == request.resource.data.player2);
+    }
   }
 }
