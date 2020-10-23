@@ -36,45 +36,35 @@ if (!function_name || function_name === "invitations") {
         .filter((id: string) => !previousList.includes(id))
         .pop();
 
-      return fid === undefined
-        ? Promise.resolve().then(() =>
-            logger.log("Ignored : Friend removed or no change")
-          )
-        : db
-            .doc("friends/" + fid)
-            .get()
-            .then((friendsDoc) =>
-              !friendsDoc.exists
-                ? Promise.resolve().then(() =>
-                    logger.error("Ignored : friends/" + fid + " doesn't exist")
-                  )
-                : friendsDoc.get("users").includes(uid)
-                ? Promise.resolve().then(() =>
-                    logger.log(
+      return Promise.resolve().then(() =>
+        fid === undefined
+          ? logger.log("Ignored : Friend removed or no change")
+          : db
+              .doc("friends/" + fid)
+              .get()
+              .then((friendsDoc) =>
+                !friendsDoc.exists
+                  ? logger.error("Ignored : friends/" + fid + " doesn't exist")
+                  : friendsDoc.get("users").includes(uid)
+                  ? logger.log(
                       "Ignored : " + uid + " already exist in friends/" + fid
                     )
-                  )
-                : db
-                    .doc("invitations/" + fid)
-                    .get()
-                    .then((invitationsDoc) =>
-                      !invitationsDoc.exists
-                        ? Promise.resolve().then(() =>
-                            logger.error(
+                  : db
+                      .doc("invitations/" + fid)
+                      .get()
+                      .then((invitationsDoc) =>
+                        !invitationsDoc.exists
+                          ? logger.error(
                               "Ignored : invitations/" + fid + " doesn't exist"
                             )
-                          )
-                        : invitationsDoc.get("users").includes(uid)
-                        ? Promise.resolve().then(() =>
-                            logger.log(
+                          : invitationsDoc.get("users").includes(uid)
+                          ? logger.log(
                               "Ignored : " +
                                 uid +
                                 " already exist in invitations/" +
                                 fid
                             )
-                          )
-                        : Promise.resolve().then(() =>
-                            db
+                          : db
                               .doc("invitations/" + fid)
                               .update({
                                 users: invitationsDoc.get("users").concat(uid)
@@ -95,11 +85,9 @@ if (!function_name || function_name === "invitations") {
                                 if (webToken !== undefined)
                                   tokens.push(webToken["token"]); */
                                 return tokens.length < 1
-                                  ? Promise.resolve().then(() =>
-                                      logger.error(
-                                        "Ignored : No fcmToken found on users/" +
-                                          fid
-                                      )
+                                  ? logger.error(
+                                      "Ignored : No fcmToken found on users/" +
+                                        fid
                                     )
                                   : notify
                                       .sendMulticast({
@@ -148,67 +136,69 @@ if (!function_name || function_name === "invitations") {
                                   err
                                 )
                               )
-                          )
-                    )
-                    .catch((err) =>
-                      logger.error(
-                        "Access error on invitations/" + fid + ":",
-                        err
                       )
-                    )
-            )
-            .catch((err) =>
-              logger.error("Access error on friends/" + fid + ":", err)
-            );
+                      .catch((err) =>
+                        logger.error(
+                          "Access error on invitations/" + fid + ":",
+                          err
+                        )
+                      )
+              )
+              .catch((err) =>
+                logger.error("Access error on friends/" + fid + ":", err)
+              )
+      );
     });
 }
 
 if (!function_name || function_name === "cleanup") {
   ensureAdminIsInitialized();
   const db = fs_extern();
-  const account = auth();
+  const accounts = auth();
 
-  exports.cleanup = https.onRequest(async (_req, resp) => {
-    try {
-      const invalidUids: string[] = (
-        await db
-          .collection("users")
-          .where("fullName", "==", "Nuage Laboratoire")
-          .get()
-      ).docs.map((user) => user.id);
+  exports.cleanup = https.onRequest((_req, resp) => {
+    return Promise.resolve()
+      .then(async () => {
+        const invalidUids: string[] = (
+          await db
+            .collection("users")
+            .where("fullName", "==", "Nuage Laboratoire")
+            .get()
+        ).docs.map((user) => user.id);
 
-      invalidUids.forEach(async (uid) => {
-        await db.doc("users/" + uid).delete();
-        await db.doc("friends/" + uid).delete();
-        await db.doc("invitations/" + uid).delete();
-        await db.doc("managers/" + uid).delete();
+        invalidUids.forEach(async (uid) => {
+          await db.doc("users/" + uid).delete();
+          await db.doc("friends/" + uid).delete();
+          await db.doc("invitations/" + uid).delete();
+          await db.doc("managers/" + uid).delete();
+        });
+
+        const validUids: string[] = (
+          await db.collection("users").get()
+        ).docs.map((user) => user.id);
+
+        let pageToken: string | undefined;
+        do {
+          const listUsers: auth.ListUsersResult = await accounts.listUsers(
+            1000,
+            pageToken
+          );
+          invalidUids.push(
+            ...listUsers.users
+              .map((user) => user.uid)
+              .filter((uid) => !validUids.includes(uid))
+          );
+          pageToken = listUsers.pageToken;
+        } while (!!pageToken);
+
+        await accounts.deleteUsers(invalidUids);
+
+        resp.status(200).send({ "Deleted users": invalidUids });
+        logger.log("Deleted users:", invalidUids);
+      })
+      .catch((err) => {
+        resp.status(500).send("Cleaning error on users");
+        logger.error("Cleaning error on users :", err);
       });
-
-      const validUids: string[] = (await db.collection("users").get()).docs.map(
-        (user) => user.id
-      );
-
-      let pageToken: string | undefined;
-      do {
-        const listUsers: auth.ListUsersResult = await account.listUsers(
-          1000,
-          pageToken
-        );
-        invalidUids.push(
-          ...listUsers.users
-            .map((user) => user.uid)
-            .filter((uid) => !validUids.includes(uid))
-        );
-        pageToken = listUsers.pageToken;
-      } while (!!pageToken);
-
-      await account.deleteUsers(invalidUids);
-
-      resp.status(200).send({ "Deleted users": invalidUids });
-      logger.log("Deleted users:", invalidUids);
-    } catch (err) {
-      resp.status(500).send("Cleaning error on users");
-      logger.error("Cleaning error on users :", err);
-    }
   });
 }
