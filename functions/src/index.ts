@@ -21,6 +21,58 @@ const ensureAdminIsInitialized = () => {
 // Smarter cold boot functions
 const function_name = process.env.FUNCTION_NAME || process.env.K_SERVICE;
 
+if (!function_name || function_name === "cleanup") {
+  ensureAdminIsInitialized();
+  const db = fs_extern();
+  const accounts = auth();
+
+  exports.cleanup = https.onRequest((_req, resp) => {
+    return Promise.resolve()
+      .then(async () => {
+        const invalidUids: string[] = (
+          await db
+            .collection("users")
+            .where("fullName", "==", "Nuage Laboratoire")
+            .get()
+        ).docs.map((user) => user.id);
+
+        invalidUids.forEach(async (uid) => {
+          await db.doc("users/" + uid).delete();
+          await db.doc("friends/" + uid).delete();
+          await db.doc("invitations/" + uid).delete();
+          await db.doc("managers/" + uid).delete();
+        });
+
+        const validUids: string[] = (
+          await db.collection("users").get()
+        ).docs.map((user) => user.id);
+
+        let pageToken: string | undefined;
+        do {
+          const listUsers: auth.ListUsersResult = await accounts.listUsers(
+            1000,
+            pageToken
+          );
+          invalidUids.push(
+            ...listUsers.users
+              .map((user) => user.uid)
+              .filter((uid) => !validUids.includes(uid))
+          );
+          pageToken = listUsers.pageToken;
+        } while (!!pageToken);
+
+        await accounts.deleteUsers(invalidUids);
+
+        resp.status(200).send({ "Deleted users": invalidUids });
+        logger.log("Deleted users:", invalidUids);
+      })
+      .catch((err) => {
+        resp.status(500).send("Cleaning error on users");
+        logger.error("Cleaning error on users :", err);
+      });
+  });
+}
+
 if (!function_name || function_name === "invitations") {
   ensureAdminIsInitialized();
   const db = fs_extern();
@@ -151,64 +203,12 @@ if (!function_name || function_name === "invitations") {
     });
 }
 
-if (!function_name || function_name === "cleanup") {
-  ensureAdminIsInitialized();
-  const db = fs_extern();
-  const accounts = auth();
-
-  exports.cleanup = https.onRequest((_req, resp) => {
-    return Promise.resolve()
-      .then(async () => {
-        const invalidUids: string[] = (
-          await db
-            .collection("users")
-            .where("fullName", "==", "Nuage Laboratoire")
-            .get()
-        ).docs.map((user) => user.id);
-
-        invalidUids.forEach(async (uid) => {
-          await db.doc("users/" + uid).delete();
-          await db.doc("friends/" + uid).delete();
-          await db.doc("invitations/" + uid).delete();
-          await db.doc("managers/" + uid).delete();
-        });
-
-        const validUids: string[] = (
-          await db.collection("users").get()
-        ).docs.map((user) => user.id);
-
-        let pageToken: string | undefined;
-        do {
-          const listUsers: auth.ListUsersResult = await accounts.listUsers(
-            1000,
-            pageToken
-          );
-          invalidUids.push(
-            ...listUsers.users
-              .map((user) => user.uid)
-              .filter((uid) => !validUids.includes(uid))
-          );
-          pageToken = listUsers.pageToken;
-        } while (!!pageToken);
-
-        await accounts.deleteUsers(invalidUids);
-
-        resp.status(200).send({ "Deleted users": invalidUids });
-        logger.log("Deleted users:", invalidUids);
-      })
-      .catch((err) => {
-        resp.status(500).send("Cleaning error on users");
-        logger.error("Cleaning error on users :", err);
-      });
-  });
-}
-
-if (!function_name || function_name === "games") {
+if (!function_name || function_name === "managers") {
   ensureAdminIsInitialized();
   const db = fs_extern();
   const notify = messaging();
 
-  exports.games = fs_intern
+  exports.managers = fs_intern
     .document("games/{gameId}")
     .onCreate((snapshot, context) => {
       const uid: string = context.params.gameId;
@@ -294,5 +294,91 @@ if (!function_name || function_name === "games") {
         .catch((err) =>
           logger.error("Access error on managers/" + player2 + ":", err)
         );
+    });
+}
+
+if (!function_name || function_name === "games") {
+  ensureAdminIsInitialized();
+  const db = fs_extern();
+  const notify = messaging();
+
+  exports.games = fs_intern
+    .document("games/{gameId}")
+    .onUpdate((change, context) => {
+      const uid: string = context.params.gameId;
+      const data = change.after;
+      const name: string = data.get("name");
+      const player1: string = data.get("player1");
+      const player2: string = data.get("player2");
+      const state: string = data.get("state");
+      const lastPlayer: string = state[0] == "1" ? player1 : player2;
+      const targetPlayer: string = state[0] == "1" ? player2 : player1;
+      let action: String;
+      switch (state[1]) {
+        case "D":
+          action = "declined...";
+          break;
+        case "P":
+          action = "played. It's your turn !";
+          break;
+        case "W":
+          action = "won !";
+          break;
+        case "L":
+          action = "lost !";
+          break;
+        default:
+          return Promise.resolve().then(() =>
+            logger.error("Bad state on games/" + uid)
+          );
+      }
+
+      return Promise.resolve().then(async () => {
+        const tokens: string[] = [];
+        const user = await db.doc("users/" + targetPlayer).get();
+        const mobileToken = user.get("mobile");
+        if (mobileToken !== undefined) tokens.push(mobileToken["token"]);
+        /* const webToken = user.get("web");
+            if (webToken !== undefined)
+              tokens.push(webToken["token"]); */
+        return tokens.length < 1
+          ? logger.error("Ignored : No fcmToken found on users/" + targetPlayer)
+          : notify
+              .sendMulticast({
+                tokens: tokens,
+                notification: {
+                  title:
+                    name +
+                    " : " +
+                    (await db.doc("users/" + lastPlayer).get()).get(
+                      "nickname"
+                    ) +
+                    " " +
+                    action,
+                  body: "Tap to open"
+                },
+                data: {
+                  screen: "/start"
+                },
+                android: {
+                  collapseKey: "games",
+                  notification: {
+                    priority: "max",
+                    clickAction: "FLUTTER_NOTIFICATION_CLICK",
+                    channelId: "ZONE_ALERT",
+                    visibility: "public",
+                    sound: "default"
+                  }
+                }
+                /* webpush: { headers: { TTL: "600" } } */
+              })
+              .then(() => logger.log("Notification sent to " + targetPlayer))
+              .catch((err) =>
+                logger.error(
+                  "Notification error on users/" + targetPlayer + ":",
+                  err
+                )
+              );
+      });
     });
 }
