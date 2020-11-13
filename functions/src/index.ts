@@ -202,3 +202,97 @@ if (!function_name || function_name === "cleanup") {
       });
   });
 }
+
+if (!function_name || function_name === "games") {
+  ensureAdminIsInitialized();
+  const db = fs_extern();
+  const notify = messaging();
+
+  exports.games = fs_intern
+    .document("games/{gameId}")
+    .onCreate((snapshot, context) => {
+      const uid: string = context.params.gameId;
+      const player1: string = snapshot.get("player1");
+      const player2: string = snapshot.get("player2");
+
+      return db
+        .doc("managers/" + player2)
+        .get()
+        .then((managersDoc) =>
+          !managersDoc.exists
+            ? logger.error("Ignored : managers/" + player2 + " doesn't exist")
+            : managersDoc.get("games").includes(uid)
+            ? logger.log(
+                "Ignored : " + uid + " already exist in managers/" + player2
+              )
+            : db
+                .doc("managers/" + player2)
+                .update({
+                  games: managersDoc.get("games").concat(uid)
+                })
+                .then(async () => {
+                  logger.log(
+                    "Game " +
+                      uid +
+                      " created by " +
+                      player1 +
+                      " and added for " +
+                      player2
+                  );
+                  const tokens: string[] = [];
+                  const user = await db.doc("users/" + player2).get();
+                  const mobileToken = user.get("mobile");
+                  if (mobileToken !== undefined)
+                    tokens.push(mobileToken["token"]);
+                  /* const webToken = user.get("web");
+                      if (webToken !== undefined)
+                        tokens.push(webToken["token"]); */
+                  return tokens.length < 1
+                    ? logger.error(
+                        "Ignored : No fcmToken found on users/" + player2
+                      )
+                    : notify
+                        .sendMulticast({
+                          tokens: tokens,
+                          notification: {
+                            title:
+                              "New game from " +
+                              (await db.doc("users/" + player1).get()).get(
+                                "nickname"
+                              ),
+                            body: "Tap to open"
+                          },
+                          data: {
+                            screen: "/start"
+                          },
+                          android: {
+                            collapseKey: "games",
+                            notification: {
+                              priority: "max",
+                              clickAction: "FLUTTER_NOTIFICATION_CLICK",
+                              channelId: "ZONE_ALERT",
+                              visibility: "public",
+                              sound: "default"
+                            }
+                          }
+                          /* webpush: { headers: { TTL: "600" } } */
+                        })
+                        .then(() =>
+                          logger.log("Notification sent to " + player2)
+                        )
+                        .catch((err) =>
+                          logger.error(
+                            "Notification error on users/" + player2 + ":",
+                            err
+                          )
+                        );
+                })
+                .catch((err) =>
+                  logger.error("Update error on managers/" + player2 + ":", err)
+                )
+        )
+        .catch((err) =>
+          logger.error("Access error on managers/" + player2 + ":", err)
+        );
+    });
+}
