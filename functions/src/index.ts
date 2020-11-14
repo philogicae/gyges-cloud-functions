@@ -256,7 +256,7 @@ if (!function_name || function_name === "managers") {
                           tokens: tokens,
                           notification: {
                             title:
-                              "New game from " +
+                              "Invitation to play with " +
                               (await db.doc("users/" + player1).get()).get(
                                 "nickname"
                               ),
