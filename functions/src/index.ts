@@ -311,9 +311,9 @@ if (!function_name || function_name === "games") {
       const player1: string = data.get("player1");
       const player2: string = data.get("player2");
       const state: string = data.get("state");
-      const lastPlayer: string = state[0] == "1" ? player1 : player2;
-      const targetPlayer: string = state[0] == "1" ? player2 : player1;
-      let action: String;
+      const lastPlayer: string = state[0] === "1" ? player1 : player2;
+      const targetPlayer: string = state[0] === "1" ? player2 : player1;
+      let action: string;
       switch (state[1]) {
         case "D":
           action = "declined...";
@@ -358,7 +358,8 @@ if (!function_name || function_name === "games") {
                   body: "Tap to open"
                 },
                 data: {
-                  screen: "/start"
+                  screen: "/game",
+                  gameId: uid
                 },
                 android: {
                   collapseKey: "games",
